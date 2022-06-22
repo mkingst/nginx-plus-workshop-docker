@@ -81,19 +81,20 @@ nginxplus   latest  ef2bf65931cf  6 seconds ago  91.2 MB
 
 ```$ docker run --name mynginxplus -p 80:80 -d nginxplus```
 
-You not have an NGINX Plus container running. 
+You now have an NGINX Plus container running. 
+
 
 ### 4. Access NGINX Plus from a browser on localhost:80. 
 
 ![image](https://user-images.githubusercontent.com/44472403/175025402-208d0810-0c6a-4bb9-aa4f-5a6392c6cc38.png)
 
-
 ## Configure NGINX as a Load Balancer for two Wordpress Sites
 
 ### Execute a shell into the NGINX container
 
-``` root@ip-172-31-6-122:~/nginx_docker# docker exec -it mynginxplus bash
-    root@28d88ee569b8:/#
+``` 
+root@ip-172-31-6-122:~/nginx_docker# docker exec -it mynginxplus bash
+root@28d88ee569b8:/#
 ```
 
 ### Go to the core NGINX configuration directory
@@ -104,6 +105,7 @@ You not have an NGINX Plus container running.
 
 ```
 root@28d88ee569b8:/etc/nginx/conf.d# rm default.conf
+
 root@28d88ee569b8:/etc/nginx/conf.d# vi wordpress.conf
 ```
 
@@ -136,6 +138,7 @@ server {
 ```
 
 - The "upstream" block is a load balancing pool that includes both Wordpress backends (172.17.0.1 is the default IP for the Docker host)
+- The "keepalive" directive sets the maximum number of idle keepalive connections to upstream servers that are preserved in the cache of each worker process. 
 - The NGINX virtual server is listening in port 80
 - We have access and error logs configured
 - Added a health check to ensure traffic is not sent to a backend that has no HTTP response
@@ -148,17 +151,18 @@ server {
 root@28d88ee569b8:/etc/nginx/conf.d# nginx -t
 nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
 nginx: configuration file /etc/nginx/nginx.conf test is successful
+
 root@28d88ee569b8:/etc/nginx/conf.d# nginx -s reload
 2022/06/22 12:22:55 [notice] 83#83: signal process started
 ```
 
-### Access NGINX in the browser 
+### Access NGINX in your browser 
 
 NGINX is now acting as a proxy and load balancer for both Wordpress backends. Refresh the page continuously to see round-robin load balancing. 
 
 ![image](https://user-images.githubusercontent.com/44472403/175027676-f1fac771-11b5-4d46-8736-b3dd69dc0b56.png)
 
-## Enhanced NGINX Configuration
+## Enhanced NGINX Configuration (full config avaiable in repo)
 
 ### Enable the NGINX Plus Dashboard and API
 
@@ -245,7 +249,7 @@ upstream wordpress-pool {
 
         keepalive 20;
 
-	      sticky cookie srv_id expires=1h domain=.example.com path=/;
+	sticky cookie srv_id expires=1h domain=.example.com path=/;
 }
 ```
 
@@ -253,4 +257,11 @@ https://docs.nginx.com/nginx/admin-guide/load-balancer/http-load-balancer/#choos
 https://docs.nginx.com/nginx/admin-guide/load-balancer/http-load-balancer/#enabling-session-persistence
 
 
-### Enhanced Configuration File Included in Repo
+### Additional Links
+
+Installing NGINX Plus: https://docs.nginx.com/nginx/admin-guide/installing-nginx/installing-nginx-plus/
+
+Full NGINX Directive Index: http://nginx.org/en/docs/dirindex.html 
+
+NGINX Administration Guide: https://docs.nginx.com
+
