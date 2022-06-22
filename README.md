@@ -134,3 +134,27 @@ server {
 
 }
 ```
+
+- The "upstream" block is a load balancing pool that includes both Wordpress backends (172.17.0.1 is the default IP for the Docker host)
+- The NGINX virtual server is listening in port 80
+- We have access and error logs configured
+- Added a health check to ensure traffic is not sent to a backend that has no HTTP response
+- The $upstream_addr variable includes the IP of the backend NGINX is proxying to (upstream IP). 
+- Added a X-Upstream-Add header to see the backend IP in your browser
+
+### Reload NGINX
+
+```
+root@28d88ee569b8:/etc/nginx/conf.d# nginx -t
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+root@28d88ee569b8:/etc/nginx/conf.d# nginx -s reload
+2022/06/22 12:22:55 [notice] 83#83: signal process started
+```
+
+### Access NGINX in the browser 
+
+NGINX is now acting as a proxy and load balancer for both wordpress backends. Refresh the page continuously to see round-robin load balancing. 
+
+![image](https://user-images.githubusercontent.com/44472403/175027676-f1fac771-11b5-4d46-8736-b3dd69dc0b56.png)
+
