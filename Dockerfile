@@ -1,75 +1,78 @@
-FROM debian:bullseye-slim
+FROM alpine:3.17
 
 LABEL maintainer="NGINX Docker Maintainers <docker-maint@nginx.com>"
 
 # Define NGINX versions for NGINX Plus and NGINX Plus modules
-# Uncomment this block and the versioned nginxPackages block in the main RUN
+# Uncomment this block and the versioned nginxPackages in the main RUN
 # instruction to install a specific release
-# ENV NGINX_VERSION   26
-# ENV NJS_VERSION     0.7.2
-# ENV PKG_RELEASE     1~bullseye
+# ENV NGINX_VERSION 28
+# ENV NJS_VERSION   0.7.9
+# ENV PKG_RELEASE   1
 
 # Download certificate and key from the customer portal (https://account.f5.com)
 # and copy to the build context
-RUN --mount=type=secret,id=nginx-crt,dst=nginx-repo.crt \
-    --mount=type=secret,id=nginx-key,dst=nginx-repo.key \
+RUN --mount=type=secret,id=nginx-crt,dst=cert.pem \
+    --mount=type=secret,id=nginx-key,dst=cert.key \
     set -x \
 # Create nginx user/group first, to be consistent throughout Docker variants
-    && addgroup --system --gid 101 nginx \
-    && adduser --system --disabled-login --ingroup nginx --no-create-home --home /nonexistent --gecos "nginx user" --shell /bin/false --uid 101 nginx \
-    && apt-get update \
-    && apt-get install --no-install-recommends --no-install-suggests -y \
-                        ca-certificates \
-                        gnupg1 \
-                        lsb-release \
-                        vim \
-                        curl \
-    && \
-    NGINX_GPGKEY=573BFD6B3D8FBC641079A6ABABF5BD827BD9BF62; \
-    found=''; \
-    for server in \
-        hkp://keyserver.ubuntu.com:80 \
-        pgp.mit.edu \
-    ; do \
-        echo "Fetching GPG key $NGINX_GPGKEY from $server"; \
-        apt-key adv --keyserver "$server" --keyserver-options timeout=10 --recv-keys "$NGINX_GPGKEY" && found=yes && break; \
-    done; \
-    test -z "$found" && echo >&2 "error: failed to fetch GPG key $NGINX_GPGKEY" && exit 1; \
-    apt-get remove --purge --auto-remove -y gnupg1 && rm -rf /var/lib/apt/lists/* \
+    && addgroup -g 101 -S nginx \
+    && adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx \
 # Install the latest release of NGINX Plus and/or NGINX Plus modules
 # Uncomment individual modules if necessary
 # Use versioned packages over defaults to specify a release
     && nginxPackages=" \
         nginx-plus \
-        # nginx-plus=${NGINX_VERSION}-${PKG_RELEASE} \
+        # nginx-plus=${NGINX_VERSION}-r${PKG_RELEASE} \
         # nginx-plus-module-xslt \
-        # nginx-plus-module-xslt=${NGINX_VERSION}-${PKG_RELEASE} \
+        # nginx-plus-module-xslt=${NGINX_VERSION}-r${PKG_RELEASE} \
         # nginx-plus-module-geoip \
-        # nginx-plus-module-geoip=${NGINX_VERSION}-${PKG_RELEASE} \
+        # nginx-plus-module-geoip=${NGINX_VERSION}-r${PKG_RELEASE} \
         # nginx-plus-module-image-filter \
-        # nginx-plus-module-image-filter=${NGINX_VERSION}-${PKG_RELEASE} \
+        # nginx-plus-module-image-filter=${NGINX_VERSION}-r${PKG_RELEASE} \
         # nginx-plus-module-perl \
-        # nginx-plus-module-perl=${NGINX_VERSION}-${PKG_RELEASE} \
+        # nginx-plus-module-perl=${NGINX_VERSION}-r${PKG_RELEASE} \
         # nginx-plus-module-njs \
-        # nginx-plus-module-njs=${NGINX_VERSION}+${NJS_VERSION}-${PKG_RELEASE} \
+        # nginx-plus-module-njs=${NGINX_VERSION}.${NJS_VERSION}-r${PKG_RELEASE} \
     " \
-    && echo "Acquire::https::pkgs.nginx.com::Verify-Peer \"true\";" > /etc/apt/apt.conf.d/90nginx \
-    && echo "Acquire::https::pkgs.nginx.com::Verify-Host \"true\";" >> /etc/apt/apt.conf.d/90nginx \
-    && echo "Acquire::https::pkgs.nginx.com::SslCert     \"/etc/ssl/nginx/nginx-repo.crt\";" >> /etc/apt/apt.conf.d/90nginx \
-    && echo "Acquire::https::pkgs.nginx.com::SslKey      \"/etc/ssl/nginx/nginx-repo.key\";" >> /etc/apt/apt.conf.d/90nginx \
-    && printf "deb https://pkgs.nginx.com/plus/debian `lsb_release -cs` nginx-plus\n" > /etc/apt/sources.list.d/nginx-plus.list \
-    && mkdir -p /etc/ssl/nginx \
-    && cat nginx-repo.crt > /etc/ssl/nginx/nginx-repo.crt \
-    && cat nginx-repo.key > /etc/ssl/nginx/nginx-repo.key \
-    && apt-get update \
-    && apt-get install --no-install-recommends --no-install-suggests -y \
-                        $nginxPackages \
-                        curl \
-                        gettext-base \
-    && apt-get remove --purge -y lsb-release \
-    && apt-get remove --purge --auto-remove -y && rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/nginx-plus.list \
-    && rm -rf /etc/apt/apt.conf.d/90nginx /etc/ssl/nginx \
-# Forward request logs to Docker log collector
+    KEY_SHA512="e09fa32f0a0eab2b879ccbbc4d0e4fb9751486eedda75e35fac65802cc9faa266425edf83e261137a2f4d16281ce2c1a5f4502930fe75154723da014214f0655" \
+    && apk add --no-cache --virtual .cert-deps openssl \
+    && wget -O /tmp/nginx_signing.rsa.pub https://nginx.org/keys/nginx_signing.rsa.pub \
+    && if echo "$KEY_SHA512 */tmp/nginx_signing.rsa.pub" | sha512sum -c -; then \
+        echo "key verification succeeded!"; \
+        mv /tmp/nginx_signing.rsa.pub /etc/apk/keys/; \
+    else \
+        echo "key verification failed!"; \
+        exit 1; \
+    fi \
+    && apk del .cert-deps \
+    && cat cert.pem > /etc/apk/cert.pem \
+    && cat cert.key > /etc/apk/cert.key \
+    && apk add -X "https://pkgs.nginx.com/plus/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" --no-cache $nginxPackages \
+    && if [ -f "/etc/apk/keys/nginx_signing.rsa.pub" ]; then rm -f /etc/apk/keys/nginx_signing.rsa.pub; fi \
+    && if [ -f "/etc/apk/cert.key" ] && [ -f "/etc/apk/cert.pem" ]; then rm -f /etc/apk/cert.key /etc/apk/cert.pem; fi \
+# Bring in gettext so we can get `envsubst`, then throw
+# the rest away. To do this, we need to install `gettext`
+# then move `envsubst` out of the way so `gettext` can
+# be deleted completely, then move `envsubst` back.
+    && apk add --no-cache --virtual .gettext gettext \
+    && mv /usr/bin/envsubst /tmp/ \
+    \
+    && runDeps="$( \
+        scanelf --needed --nobanner /tmp/envsubst \
+            | awk '{ gsub(/,/, "\nso:", $2); print "so:" $2 }' \
+            | sort -u \
+            | xargs -r apk info --installed \
+            | sort -u \
+    )" \
+    && apk add --no-cache $runDeps \
+    && apk del .gettext \
+    && mv /tmp/envsubst /usr/local/bin/ \
+# Bring in tzdata so users could set the timezones through the environment
+# variables
+    && apk add --no-cache tzdata \
+# Bring in curl and ca-certificates to make registering on DNS SD easier
+    && apk add --no-cache curl ca-certificates \
+# Forward request and error logs to Docker log collector
     && ln -sf /dev/stdout /var/log/nginx/access.log \
     && ln -sf /dev/stderr /var/log/nginx/error.log
 
@@ -78,3 +81,5 @@ EXPOSE 80
 STOPSIGNAL SIGQUIT
 
 CMD ["nginx", "-g", "daemon off;"]
+
+# vim:syntax=Dockerfile
